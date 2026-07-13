@@ -1,0 +1,23 @@
+# ROS 2 / colcon build artifacts
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Bobot model (simpan di release / cloud storage, bukan di git)
+*.pt
+*.onnx
+*.engine
+
+# Hasil run Ultralytics
+runs/
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,9 @@
+# Dependency Python untuk node deteksi (di luar dependency ROS)
+# ROS 2 Foxy berjalan di Ubuntu 20.04 / Python 3.8 -- versi di bawah ini
+# sudah diuji kompatibel dengan Python 3.8.
+
+ultralytics==8.0.196     # YOLOv8 (versi stabil untuk Python 3.8)
+numpy<1.24               # hindari breaking change np.float pada lib lama
+opencv-python>=4.5       # biasanya sudah ada bawaan cv_bridge/ros-foxy
+torch>=1.8,<2.1          # sesuaikan dengan CUDA kamu jika pakai GPU
+torchvision<0.16
