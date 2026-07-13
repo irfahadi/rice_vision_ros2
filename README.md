@@ -17,7 +17,10 @@ beranotasi kembali ke jaringan ROS.
 └──────────────┘                      └───────┬───────┘
                                               │ /rice_vision/annotated_image
                                               ▼ sensor_msgs/Image
-                                      (rqt_image_view / rviz2)
+                                      ┌───────────────┐
+                                      │  viewer_node  │  jendela + panel info
+                                      │  (interface)  │  (bisa juga rqt/rviz2)
+                                      └───────────────┘
 ```
 
 ## Isi Repo
@@ -25,7 +28,7 @@ beranotasi kembali ke jaringan ROS.
 | Package | Tipe | Fungsi |
 |---|---|---|
 | `rice_vision_interfaces` | ament_cmake (msg) | Pesan custom `Detection` & `DetectionArray` |
-| `rice_vision` | ament_python | `camera_node` (publisher webcam) & `detector_node` (inferensi YOLOv8) |
+| `rice_vision` | ament_python | `camera_node` (publisher webcam), `detector_node` (inferensi YOLOv8) & `viewer_node` (jendela tampilan) |
 
 ## Prasyarat
 
@@ -112,16 +115,40 @@ ros2 launch rice_vision detection.launch.py \
 
 Konfigurasi permanen bisa diedit di `rice_vision/config/params.yaml`.
 
-### Melihat hasil
+### Melihat hasil (interface)
 
-Visualisasi frame beranotasi (bounding box + label):
+Ada tiga cara menampilkan hasil deteksi:
+
+**1. Viewer bawaan (jendela khusus, direkomendasikan).** `detection.launch.py`
+sudah otomatis membuka jendela viewer (`viewer_node`) yang menampilkan feed
+kamera beranotasi + panel info (jumlah objek, FPS, waktu inferensi, rincian
+tiap objek). Tidak perlu perintah tambahan -- cukup:
 
 ```bash
-# opsi 1: rqt
-ros2 run rqt_image_view rqt_image_view /rice_vision/annotated_image
-
-# opsi 2: rviz2 -> Add -> Image -> topic /rice_vision/annotated_image
+ros2 launch rice_vision detection.launch.py
 ```
+
+Tekan `q` pada jendela untuk menutup. Untuk mode headless (tanpa GUI, mis.
+di server/SSH tanpa X), matikan viewer:
+
+```bash
+ros2 launch rice_vision detection.launch.py viewer:=false
+```
+
+Viewer juga bisa dijalankan sendiri di terminal terpisah (mis. kalau kamu
+menjalankan camera_node + detector_node di mesin lain):
+
+```bash
+ros2 run rice_vision viewer_node
+```
+
+**2. rqt_image_view (bawaan ROS).**
+
+```bash
+ros2 run rqt_image_view rqt_image_view /rice_vision/annotated_image
+```
+
+**3. rviz2.** Add → Image → topic `/rice_vision/annotated_image`.
 
 Data deteksi terstruktur (kelas, confidence, bbox, jumlah objek):
 

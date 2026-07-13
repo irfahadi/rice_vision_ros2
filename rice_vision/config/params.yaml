@@ -20,3 +20,11 @@ detector_node:
     device: cpu                      # ganti 'cuda:0' jika ada GPU NVIDIA
     publish_annotated: true
     max_detection_rate: 10.0         # maksimal frame/detik yang diinferensi
+
+viewer_node:
+  ros__parameters:
+    annotated_topic: /rice_vision/annotated_image
+    detections_topic: /rice_vision/detections
+    window_name: "Rice Vision - Deteksi Objek"
+    panel_width: 320                 # lebar panel info (px) di sisi kanan
+    show_display_fps: true

@@ -1,9 +1,10 @@
-"""Launch file utama: menjalankan camera_node + detector_node sekaligus.
+"""Launch file utama: menjalankan camera_node + detector_node (+ viewer).
 
 Contoh:
   ros2 launch rice_vision detection.launch.py
   ros2 launch rice_vision detection.launch.py model_path:=/path/ke/best.pt
   ros2 launch rice_vision detection.launch.py camera_id:=1 device:=cuda:0
+  ros2 launch rice_vision detection.launch.py viewer:=false   # tanpa jendela
 """
 
 import os
@@ -11,6 +12,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -37,6 +39,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'confidence_threshold', default_value='0.5',
             description='Ambang confidence deteksi'),
+        DeclareLaunchArgument(
+            'viewer', default_value='true',
+            description='Tampilkan jendela viewer (true/false). '
+                        'Set false untuk mode headless/tanpa GUI.'),
 
         # ---- Node kamera ----
         Node(
@@ -65,5 +71,16 @@ def generate_launch_description():
                         LaunchConfiguration('confidence_threshold'),
                 },
             ],
+        ),
+
+        # ---- Node viewer (jendela tampilan) ----
+        # Hanya dijalankan bila argumen viewer:=true (default).
+        Node(
+            package='rice_vision',
+            executable='viewer_node',
+            name='viewer_node',
+            output='screen',
+            condition=IfCondition(LaunchConfiguration('viewer')),
+            parameters=[LaunchConfiguration('params_file')],
         ),
     ])
