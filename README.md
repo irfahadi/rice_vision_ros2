@@ -35,30 +35,50 @@ beranotasi kembali ke jaringan ROS.
 
 ## Instalasi
 
-```bash
-# 1. Dependency ROS
-sudo apt update
-sudo apt install -y ros-foxy-cv-bridge ros-foxy-vision-opencv \
-                    python3-pip python3-colcon-common-extensions
+Dependency Python untuk YOLOv8 (`ultralytics`, `torch`, dll.) butuh versi
+`numpy` yang lebih baru daripada bawaan Ubuntu 20.04. **Jangan install
+langsung ke Python sistem** — pakai virtual environment dengan
+`--system-site-packages` supaya tetap bisa mengakses `rclpy` dkk dari ROS:
 
-# 2. Buat workspace & clone/extract repo ini ke src/
+```bash
+# 1. Dependency ROS (perhatikan: python3-opencv, BUKAN cv-bridge --
+#    lihat catatan di bagian Troubleshooting)
+sudo apt update
+sudo apt install -y python3-opencv python3-pip python3-venv \
+                    python3-colcon-common-extensions
+
+# 2. Buat workspace & extract repo ini ke src/
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
 # extract zip di sini, sehingga strukturnya: ~/ros2_ws/src/rice_vision_ros2/
 
-# 3. Dependency Python (YOLOv8)
-pip3 install -r rice_vision_ros2/requirements.txt
-
-# 4. Build
+# 3. Buat virtual environment (sekali saja)
 cd ~/ros2_ws
+python3 -m venv .venv --system-site-packages
+echo 'export PYTHONNOUSERSITE=1' >> .venv/bin/activate   # cegah bentrok dgn ~/.local
+source .venv/bin/activate
+
+# 4. Dependency Python (YOLOv8). Kalau sudah punya torch yang cocok dengan
+#    GPU/CUDA kamu, install ultralytics tanpa menimpanya:
+#      pip install --no-deps ultralytics==8.0.196
+#      pip install numpy==1.23.5 opencv-python
+#    Kalau belum punya torch sama sekali, pakai requirements.txt penuh
+#    (baca komentar torch di dalamnya untuk pilihan CPU vs CUDA):
+pip install -r rice_vision_ros2/requirements.txt
+
+# 5. Build (WAJIB dengan venv aktif, supaya node memakai Python venv ini)
 source /opt/ros/foxy/setup.bash
 colcon build --symlink-install
 
-# 5. Source hasil build (lakukan di setiap terminal baru)
+# 6. Source hasil build (lakukan di setiap terminal baru, urutan penting:
+#    venv dulu baru install/setup.bash)
+source .venv/bin/activate
 source ~/ros2_ws/install/setup.bash
 ```
 
-> **Tips:** tambahkan dua baris `source` di atas ke `~/.bashrc` agar otomatis.
+> **Tips:** jangan tambahkan baris `source` ke `~/.bashrc` untuk repo ini,
+> karena venv-nya sebaiknya diaktifkan manual per sesi kerja (agar tidak
+> tertukar dengan proyek ROS lain yang tidak butuh venv ini).
 
 ## Menjalankan
 
@@ -168,12 +188,42 @@ def on_detections(self, msg):
 
 - **`Cannot open camera 0`** — cek `ls /dev/video*`, ganti `camera_id`, dan
   pastikan user masuk grup video: `sudo usermod -aG video $USER` (lalu logout).
+- **`ImportError: Matplotlib requires numpy>=1.20; you have 1.17.4` atau
+  node memuat `ultralytics` dari `/usr/local/lib/.../dist-packages` bukan
+  dari venv** — ini artinya `ros2 launch` dijalankan **tanpa venv aktif**
+  (atau `colcon build` dilakukan tanpa venv aktif sehingga script hasil
+  build "terkunci" ke Python sistem). Perbaikan: hapus build lama lalu
+  build ulang dengan venv aktif:
+  ```bash
+  source ~/ros2_ws/.venv/bin/activate
+  cd ~/ros2_ws
+  rm -rf build install log
+  colcon build --symlink-install
+  source install/setup.bash
+  ros2 launch rice_vision detection.launch.py
+  ```
+- **`KeyError: 16` (atau error aneh lain) dari `cv_bridge`** — repo ini
+  **tidak lagi memakai `cv_bridge`** (lihat `rice_vision/image_codec.py`)
+  justru karena bug ini: `cv_bridge` adalah binary C++ yang di-compile
+  melawan versi OpenCV/numpy tertentu, dan gampang bentrok begitu venv
+  memakai `opencv-python`/`numpy` versi lain untuk ultralytics. Kalau kamu
+  masih menemukan pesan ini, pastikan kamu memakai versi node terbaru dari
+  repo ini (cek tidak ada lagi `from cv_bridge import CvBridge` di
+  `camera_node.py` / `detector_node.py`).
+- **Error terkait `nvidia-*-cu12` / `libnvJitLink.so` saat `import torch`**
+  — biasanya ada beberapa versi paket `nvidia-*-cu12` tercampur antara
+  `~/.local` dan venv. Install ulang torch dengan `--force-reinstall` di
+  dalam venv yang aktif (lihat komentar di `requirements.txt` untuk index
+  CUDA yang sesuai), dan pastikan `PYTHONNOUSERSITE=1` sudah ter-set
+  (baris ini otomatis ditambahkan ke `.venv/bin/activate` pada langkah
+  instalasi di atas) supaya `~/.local` tidak ikut ke-load.
 - **Import error `ultralytics`** — jalankan lagi
-  `pip3 install -r requirements.txt`; pastikan pip untuk Python 3.8.
+  `pip3 install -r requirements.txt` **di dalam venv yang aktif**.
 - **FPS rendah di CPU** — turunkan `max_detection_rate`/resolusi kamera, atau
   pakai model lebih kecil (`yolov8n`), atau set `device: cuda:0` jika ada GPU.
 - **Node tidak ditemukan setelah build** — pastikan sudah
-  `source ~/ros2_ws/install/setup.bash` di terminal tersebut.
+  `source ~/ros2_ws/install/setup.bash` di terminal tersebut (setelah
+  venv diaktifkan).
 
 ## Roadmap (mengikuti paper)
 

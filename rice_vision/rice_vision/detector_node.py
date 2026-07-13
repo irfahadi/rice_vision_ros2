@@ -21,8 +21,8 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
 
+from rice_vision import image_codec
 from rice_vision_interfaces.msg import Detection, DetectionArray
 
 
@@ -76,7 +76,6 @@ class DetectorNode(Node):
             f'Model siap. Kelas: {self.class_names}')
 
         # ---- ROS I/O ----
-        self.bridge = CvBridge()
         self.detections_pub = self.create_publisher(
             DetectionArray, detections_topic, 10)
         self.annotated_pub = self.create_publisher(
@@ -97,7 +96,7 @@ class DetectorNode(Node):
             return
         self.last_inference_time = now
 
-        frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        frame = image_codec.imgmsg_to_cv2(msg)
 
         t0 = time.monotonic()
         results = self.model.predict(
@@ -139,8 +138,7 @@ class DetectorNode(Node):
         # ---- Publish frame beranotasi (untuk rqt_image_view / rviz2) ----
         if self.publish_annotated:
             annotated = result.plot()  # BGR ndarray dengan bbox + label
-            annotated_msg = self.bridge.cv2_to_imgmsg(annotated, encoding='bgr8')
-            annotated_msg.header = msg.header
+            annotated_msg = image_codec.cv2_to_imgmsg(annotated, header=msg.header)
             self.annotated_pub.publish(annotated_msg)
 
         if det_array.count > 0:

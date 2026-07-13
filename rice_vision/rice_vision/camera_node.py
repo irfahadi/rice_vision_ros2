@@ -14,7 +14,9 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
+from std_msgs.msg import Header
+
+from rice_vision import image_codec
 
 
 class CameraNode(Node):
@@ -47,7 +49,6 @@ class CameraNode(Node):
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
-        self.bridge = CvBridge()
         self.publisher = self.create_publisher(
             Image, image_topic, qos_profile_sensor_data)
 
@@ -65,9 +66,11 @@ class CameraNode(Node):
                                    throttle_duration_sec=5.0)
             return
 
-        msg = self.bridge.cv2_to_imgmsg(frame, encoding='bgr8')
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = self.frame_id
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = self.frame_id
+
+        msg = image_codec.cv2_to_imgmsg(frame, header=header)
         self.publisher.publish(msg)
 
     def destroy_node(self):

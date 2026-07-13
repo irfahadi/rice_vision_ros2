@@ -10,9 +10,12 @@
   <exec_depend>rclpy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
-  <exec_depend>cv_bridge</exec_depend>
   <exec_depend>rice_vision_interfaces</exec_depend>
   <exec_depend>python3-opencv</exec_depend>
+  <!-- cv_bridge SENGAJA tidak dipakai, lihat rice_vision/image_codec.py.
+       cv_bridge adalah binary C++ yang dicompile melawan OpenCV/numpy
+       versi tertentu, sering bentrok dengan opencv-python/numpy dari
+       virtual environment yang dipakai ultralytics/torch. -->
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

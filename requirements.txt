@@ -1,9 +1,27 @@
 # Dependency Python untuk node deteksi (di luar dependency ROS)
-# ROS 2 Foxy berjalan di Ubuntu 20.04 / Python 3.8 -- versi di bawah ini
-# sudah diuji kompatibel dengan Python 3.8.
+# ROS 2 Foxy berjalan di Ubuntu 20.04 / Python 3.8.
+#
+# PENTING: install di dalam virtual environment (lihat README bagian
+# "Instalasi"), JANGAN langsung ke sistem Python -- Ubuntu 20.04 punya
+# numpy/scipy/matplotlib lama bawaan apt (mis. numpy 1.17.4) yang akan
+# bentrok dengan versi yang dibutuhkan ultralytics/torch kalau diinstall
+# global.
+#
+# Pin numpy secara eksplisit (bukan cuma numpy<1.24) supaya pip benar-benar
+# meng-upgrade dari versi sistem yang lama, bukan membiarkannya apa adanya.
+numpy==1.23.5
 
 ultralytics==8.0.196     # YOLOv8 (versi stabil untuk Python 3.8)
-numpy<1.24               # hindari breaking change np.float pada lib lama
 opencv-python>=4.5       # biasanya sudah ada bawaan cv_bridge/ros-foxy
-torch>=1.8,<2.1          # sesuaikan dengan CUDA kamu jika pakai GPU
-torchvision<0.16
+
+# torch & torchvision SENGAJA TIDAK didaftarkan di sini.
+# Kalau kamu sudah punya torch terpasang yang cocok dengan CUDA kamu
+# (cek: python3 -c "import torch; print(torch.__version__, torch.version.cuda)"),
+# JANGAN install ulang lewat file ini -- biarkan pip pakai yang sudah ada.
+# Install torch secara terpisah HANYA jika belum ada / mau ganti versi, contoh
+# untuk CUDA 12.1 (kompatibel dengan driver CUDA 12.2):
+#
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#
+# ultralytics 8.0.196 minimal butuh torch>=1.8 -- kompatibel dengan hampir
+# semua versi torch 2.x yang sudah terpasang untuk CUDA 12.
