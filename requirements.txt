@@ -25,3 +25,15 @@ opencv-python>=4.5       # biasanya sudah ada bawaan cv_bridge/ros-foxy
 #
 # ultralytics 8.0.196 minimal butuh torch>=1.8 -- kompatibel dengan hampir
 # semua versi torch 2.x yang sudah terpasang untuk CUDA 12.
+
+# ---- OPSIONAL: hanya jika memakai classifier_node (model Keras .h5) ----
+# TensorFlow 2.13 adalah versi TERAKHIR yang mendukung Python 3.8 (Foxy).
+# Install manual bila perlu (tidak otomatis, karena unduhannya besar):
+#
+#   pip install tensorflow==2.13.1
+#
+# Catatan: TF 2.13 butuh CUDA 11.8 untuk GPU; dengan CUDA 12.x jalankan TF
+# di CPU saja (classifier_node memang default use_gpu:=false). Kalau model
+# .h5 kamu disimpan dari Keras 3 (Colab terbaru) dan gagal dimuat di TF
+# 2.13, buka lagi di Colab lalu simpan ulang:
+#   model.save('model.h5', save_format='h5')

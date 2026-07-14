@@ -31,6 +31,7 @@ setup(
         'console_scripts': [
             'camera_node = rice_vision.camera_node:main',
             'detector_node = rice_vision.detector_node:main',
+            'classifier_node = rice_vision.classifier_node:main',
             'viewer_node = rice_vision.viewer_node:main',
         ],
     },

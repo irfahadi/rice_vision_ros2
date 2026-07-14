@@ -28,7 +28,7 @@ beranotasi kembali ke jaringan ROS.
 | Package | Tipe | Fungsi |
 |---|---|---|
 | `rice_vision_interfaces` | ament_cmake (msg) | Pesan custom `Detection` & `DetectionArray` |
-| `rice_vision` | ament_python | `camera_node` (publisher webcam), `detector_node` (inferensi YOLOv8) & `viewer_node` (jendela tampilan) |
+| `rice_vision` | ament_python | `camera_node` (publisher webcam), `detector_node` (YOLOv8 .pt), `classifier_node` (Keras .h5) & `viewer_node` (jendela tampilan) |
 
 ## Prasyarat
 
@@ -114,6 +114,42 @@ ros2 launch rice_vision detection.launch.py \
 ```
 
 Konfigurasi permanen bisa diedit di `rice_vision/config/params.yaml`.
+
+### Mode klasifikasi: model Keras .h5 (CNN bibit padi)
+
+Selain YOLO (.pt), repo ini juga mendukung **model klasifikasi Keras/
+TensorFlow (.h5)** lewat `classifier_node` — cocok untuk CNN biner
+"Bibit Padi Bagus / Tidak Bagus" yang dilatih dengan
+`ImageDataGenerator(rescale=1./255)`, `target_size=(224,224)`,
+`class_mode='binary'`, dan output `Dense(1, activation='sigmoid')`.
+
+Bedanya dengan YOLO: model klasifikasi menilai **keseluruhan frame**
+(tidak ada bounding box per objek), jadi hasilnya satu label + confidence
+per frame. Node ini melakukan preprocessing persis seperti saat training
+(RGB, resize 224×224, ÷255) lalu mem-publish ke topic yang sama dengan
+pipeline YOLO, sehingga viewer bekerja tanpa perubahan.
+
+```bash
+# 1. Install TensorFlow (sekali saja, di dalam venv)
+pip install tensorflow==2.13.1
+
+# 2. Jalankan dengan model .h5 kamu
+ros2 launch rice_vision classification.launch.py \
+  model_path:=$HOME/models/model_bibit_padi.h5
+```
+
+Interpretasi output mengikuti script training: sigmoid > `threshold`
+(default 0.5) → kelas indeks 1 ("Tidak Bagus"), selain itu kelas indeks 0
+("Bagus"). Urutan nama kelas bisa diubah di `params.yaml`
+(`classifier_node.class_names`) — urutannya harus sama dengan indeks
+`flow_from_directory` (alfabetis nama folder dataset). Model dengan output
+softmax multi-kelas juga otomatis didukung (argmax).
+
+> **Catatan:** TF 2.13 (versi terakhir untuk Python 3.8) butuh CUDA 11.8
+> untuk GPU — dengan CUDA 12.x biarkan default `use_gpu: false` (CPU);
+> CNN 3-layer seperti ini tetap cepat di CPU. Kalau `.h5` kamu disimpan
+> dari Keras 3 (Colab terbaru) dan gagal dimuat, simpan ulang di Colab
+> dengan `model.save('model.h5', save_format='h5')`.
 
 ### Melihat hasil (interface)
 

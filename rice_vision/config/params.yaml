@@ -21,6 +21,24 @@ detector_node:
     publish_annotated: true
     max_detection_rate: 10.0         # maksimal frame/detik yang diinferensi
 
+classifier_node:
+  ros__parameters:
+    # Path model Keras .h5 -- isi lewat argumen launch model_path:=...
+    # atau langsung di sini:
+    model_path: ""
+    image_topic: /camera/image_raw
+    results_topic: /rice_vision/detections
+    annotated_topic: /rice_vision/annotated_image
+    # Urutan kelas HARUS mengikuti indeks flow_from_directory
+    # (alfabetis nama folder dataset saat training):
+    class_names: ["Bibit Padi (Bagus)", "Bibit Padi (Tidak Bagus)"]
+    input_width: 224                 # sesuai target_size training
+    input_height: 224
+    threshold: 0.5                   # sigmoid > 0.5 -> kelas indeks 1
+    publish_annotated: true
+    max_classification_rate: 10.0
+    use_gpu: false                   # TF dipaksa CPU (aman dgn CUDA 12.x)
+
 viewer_node:
   ros__parameters:
     annotated_topic: /rice_vision/annotated_image
