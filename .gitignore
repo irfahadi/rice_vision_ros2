@@ -21,3 +21,5 @@ runs/
 # IDE
 .vscode/
 .idea/
+rice_vision/.DS_Store
+.DS_Store

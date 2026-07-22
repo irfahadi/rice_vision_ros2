@@ -39,6 +39,26 @@ classifier_node:
     max_classification_rate: 10.0
     use_gpu: false                   # TF dipaksa CPU (aman dgn CUDA 12.x)
 
+classifier_trt_node:
+  ros__parameters:
+    # Path model .onnx (hasil convert dari .h5) atau .engine yang sudah jadi.
+    # Isi lewat argumen launch model_path:=... atau di sini:
+    model_path: ""
+    # Path simpan/muat cache engine. Kosong = model_path + ".engine".
+    engine_cache: ""
+    image_topic: /camera/image_raw
+    results_topic: /rice_vision/detections
+    annotated_topic: /rice_vision/annotated_image
+    class_names: ["Bibit Padi (Bagus)", "Bibit Padi (Tidak Bagus)"]
+    input_width: 0                   # 0 = auto (dibaca dari engine)
+    input_height: 0
+    layout: "auto"                   # auto | nhwc | nchw
+    threshold: 0.5
+    fp16: true                       # engine FP16 (lebih cepat)
+    workspace_mb: 2048               # memori saat build engine dari ONNX
+    publish_annotated: true
+    max_classification_rate: 30.0
+
 viewer_node:
   ros__parameters:
     annotated_topic: /rice_vision/annotated_image

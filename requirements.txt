@@ -37,3 +37,13 @@ opencv-python>=4.5       # biasanya sudah ada bawaan cv_bridge/ros-foxy
 # .h5 kamu disimpan dari Keras 3 (Colab terbaru) dan gagal dimuat di TF
 # 2.13, buka lagi di Colab lalu simpan ulang:
 #   model.save('model.h5', save_format='h5')
+
+# ---- OPSIONAL: hanya jika memakai classifier_trt_node (TensorRT + .onnx) ----
+# Untuk inferensi ber-akselerasi GPU dengan TensorRT. Panduan lengkap +
+# cara convert .h5 -> .onnx ada di docs/TENSORRT_ONNX.md. Ringkas (CUDA 12.x):
+#
+#   pip install tensorrt==8.6.1     # TRT 8.6 = seri pertama yg dukung CUDA 12
+#   pip install pycuda              # transfer memori host<->GPU
+#   pip install tf2onnx onnx        # (sekali) untuk convert .h5 -> .onnx
+#
+# TensorRT 7.x TIDAK mendukung CUDA 12 -- jangan dipakai di mesin ini.

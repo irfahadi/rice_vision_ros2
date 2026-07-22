@@ -28,7 +28,7 @@ beranotasi kembali ke jaringan ROS.
 | Package | Tipe | Fungsi |
 |---|---|---|
 | `rice_vision_interfaces` | ament_cmake (msg) | Pesan custom `Detection` & `DetectionArray` |
-| `rice_vision` | ament_python | `camera_node` (publisher webcam), `detector_node` (YOLOv8 .pt), `classifier_node` (Keras .h5) & `viewer_node` (jendela tampilan) |
+| `rice_vision` | ament_python | `camera_node` (webcam), `detector_node` (YOLOv8 .pt), `classifier_node` (Keras .h5), `classifier_trt_node` (TensorRT .onnx) & `viewer_node` (jendela tampilan) |
 
 ## Prasyarat
 
@@ -150,6 +150,38 @@ softmax multi-kelas juga otomatis didukung (argmax).
 > CNN 3-layer seperti ini tetap cepat di CPU. Kalau `.h5` kamu disimpan
 > dari Keras 3 (Colab terbaru) dan gagal dimuat, simpan ulang di Colab
 > dengan `model.save('model.h5', save_format='h5')`.
+
+### Mode klasifikasi cepat: TensorRT + model .onnx (GPU)
+
+Untuk inferensi **tercepat di GPU**, pakai `classifier_trt_node` dengan
+model ONNX (hasil convert dari `.h5`) yang dijalankan lewat **NVIDIA
+TensorRT**. Node ini membangun engine TensorRT dari `.onnx` (lalu meng-cache
+sebagai `.engine`) atau langsung memuat `.engine` yang sudah jadi, dan
+mem-publish ke topic yang sama sehingga viewer tetap bekerja.
+
+```bash
+# 1. Install TensorRT + pycuda (CUDA 12.x -> TensorRT 8.6.x), di dalam venv
+pip install tensorrt==8.6.1 pycuda
+
+# 2. Convert model .h5 -> .onnx (sekali; lihat docs/TENSORRT_ONNX.md)
+pip install tf2onnx onnx
+#    lalu jalankan script convert di dokumen tersebut
+
+# 3. Jalankan (build engine otomatis saat pertama kali, ~1-3 menit)
+ros2 launch rice_vision classification_trt.launch.py \
+  model_path:=$HOME/models/model_bibit_padi.onnx
+```
+
+Panduan lengkap (instalasi TensorRT, convert `.h5`→`.onnx`, parameter,
+troubleshooting) ada di **[docs/TENSORRT_ONNX.md](docs/TENSORRT_ONNX.md)**.
+
+Ringkasan tiga cara klasifikasi/deteksi:
+
+| Node | Model | Runtime | Kecepatan |
+|---|---|---|---|
+| `detector_node` | YOLOv8 `.pt` | Ultralytics/torch | deteksi objek + bbox |
+| `classifier_node` | Keras `.h5` | TensorFlow (CPU) | klasifikasi, tanpa convert |
+| `classifier_trt_node` | `.onnx`/`.engine` | TensorRT (GPU) | klasifikasi tercepat |
 
 ### Melihat hasil (interface)
 
