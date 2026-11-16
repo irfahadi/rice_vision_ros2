@@ -12,6 +12,9 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Detection.msg"
   "msg/DetectionArray.msg"
+  "msg/MissionCommand.msg"
+  "msg/MissionStatus.msg"
+  "msg/MissionResult.msg"
   DEPENDENCIES std_msgs
 )
 

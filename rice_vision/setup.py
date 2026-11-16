@@ -34,6 +34,8 @@ setup(
             'classifier_node = rice_vision.classifier_node:main',
             'classifier_trt_node = rice_vision.classifier_trt_node:main',
             'viewer_node = rice_vision.viewer_node:main',
+            'sink_bridge_node = rice_vision.sink_bridge_node:main',
+            'collaboration_agent_node = rice_vision.collaboration_agent_node:main',
         ],
     },
 )

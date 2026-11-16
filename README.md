@@ -27,8 +27,8 @@ beranotasi kembali ke jaringan ROS.
 
 | Package | Tipe | Fungsi |
 |---|---|---|
-| `rice_vision_interfaces` | ament_cmake (msg) | Pesan custom `Detection` & `DetectionArray` |
-| `rice_vision` | ament_python | `camera_node` (webcam), `detector_node` (YOLOv8 .pt), `classifier_node` (Keras .h5), `classifier_trt_node` (TensorRT .onnx) & `viewer_node` (jendela tampilan) |
+| `rice_vision_interfaces` | ament_cmake (msg) | Pesan custom `Detection`, `DetectionArray`, `MissionCommand`, `MissionStatus`, & `MissionResult` |
+| `rice_vision` | ament_python | `camera_node` (webcam), `detector_node` (YOLOv8 .pt), `classifier_node` (Keras .h5), `classifier_trt_node` (TensorRT .onnx), `viewer_node` (jendela tampilan), `sink_bridge_node` (bridge Sink Node RW612), & `collaboration_agent_node` (pengelola misi inspeksi) |
 
 ## Prasyarat
 
@@ -248,8 +248,11 @@ inference_time_ms: 42.7
 | Topic | Tipe | Arah | Keterangan |
 |---|---|---|---|
 | `/camera/image_raw` | `sensor_msgs/Image` | camera_node → | Frame mentah webcam (bgr8) |
-| `/rice_vision/detections` | `rice_vision_interfaces/DetectionArray` | detector_node → | Hasil deteksi terstruktur |
-| `/rice_vision/annotated_image` | `sensor_msgs/Image` | detector_node → | Frame dengan bbox tergambar |
+| `/rice_vision/detections` | `rice_vision_interfaces/DetectionArray` | detector_node / classifier → | Hasil deteksi terstruktur |
+| `/rice_vision/annotated_image` | `sensor_msgs/Image` | detector_node / classifier → | Frame dengan label / bbox |
+| `/mission/command` | `rice_vision_interfaces/MissionCommand` | sink_bridge_node → | Perintah misi dari Cloud/Sink Node (≤ 192 byte) |
+| `/mission/status` | `rice_vision_interfaces/MissionStatus` | collaboration_agent_node → | Status berkala robot ke Sink Node (≤ 128 byte, Ti=2-5s) |
+| `/mission/result` | `rice_vision_interfaces/MissionResult` | collaboration_agent_node → | Hasil inspeksi tray ke Sink Node (≤ 256 byte) |
 
 ### Parameter penting (`config/params.yaml`)
 
@@ -277,6 +280,61 @@ def on_detections(self, msg):
         self.get_logger().info(
             f'{det.class_name} ({det.confidence:.2f}) '
             f'di [{det.x_min},{det.y_min},{det.x_max},{det.y_max}]')
+```
+
+## Integrasi Sink Node NPA-VEE-RW612 & Kontrak Data Misi
+
+Modul integrasi ini menghubungkan **Collaboration Agent (Robot/Jetson)** dengan **Sink Node (`npa-vee-rw612`)** dan **Cloud** menggunakan spesifikasi kontrak data yang terstandardisasi:
+
+```
+┌─────────────┐                      ┌──────────────────────┐                     ┌─────────────────────┐
+│    Cloud    │ ── mission/command ─►│      Sink Node       │ ─ mission/command ─►│ Collaboration Agent │
+│  (Backend)  │ ◄── mission/status ──│   (NPA-VEE-RW612)    │ ◄── mission/status ─│    (ROS 2 RB01)     │
+│             │ ◄── mission/result ──│                      │ ◄── mission/result ─│ (rice_vision_ros2)  │
+└─────────────┘                      └──────────────────────┘                     └─────────────────────┘
+```
+
+### Tabel Kontrak Data Komunikasi
+
+| Topik / Arah | Format Payload (JSON) | Batasan & Karakteristik |
+|---|---|---|
+| `mission/command`<br>`Cloud → Sink Node → Collaboration Agent` | `{"m_id":"M20261023-01", "h_id":"SH01", "cmd":"INSPECT", "trays":[1,2,3,4], "crit_lvl":1, "ts":1761200010}` | **≤ 192 byte**<br>*(event-driven saat penugasan)* |
+| `mission/status`<br>`Collaboration Agent → Sink Node → Cloud` | `{"m_id":"M20261023-01", "r_id":"RB01", "st":"IN_PROGRESS", "cur_tray":3, "pct":50, "bat":84, "seq":12, "ts":1761200045}` | **≤ 128 byte**<br>*(interval Ti = 2–5 s saat misi aktif)* |
+| `mission/result`<br>`Collaboration Agent → Sink Node → Cloud` | `{"m_id":"M20261023-01", "h_id":"SH01", "tray_id":3, "label":"BAGUS", "conf":0.94, "anom":0, "seq":3, "ts":1761200050}` | **≤ 256 byte**<br>*(event-driven per tray, ≈ 15–30 s)* |
+
+### Node Pendukung
+
+1. **`sink_bridge_node`**:
+   - Menjembatani pesan antara ROS 2 topic dengan Sink Node via MQTT (default) atau Serial UART.
+   - Memvalidasi schema JSON dan batasan ukuran byte sesuai kontrak data.
+   - Topik ROS 2:
+     - Subscribe: `/mission/status` (`MissionStatus`), `/mission/result` (`MissionResult`), `/mission/status/raw`, `/mission/result/raw`
+     - Publish: `/mission/command` (`MissionCommand`), `/mission/command/raw` (`std_msgs/String`)
+
+2. **`collaboration_agent_node`**:
+   - Menangani siklus hidup misi inspeksi (`IN_PROGRESS`, `PAUSED`, `COMPLETED`, `ABORTED`).
+   - Memancarkan status berkala `mission/status` (setiap 2–5 detik).
+   - Menghubungkan deteksi visi dari `/rice_vision/detections` untuk mengklasifikasikan tiap tray (`BAGUS` / `TIDAK BAGUS`).
+   - Memancarkan `mission/result` per tray setelah evaluasi selesai (~ 15–30 s).
+
+### Menjalankan Mission Collaboration
+
+Jalankan seluruh pipeline terintegrasi (Kamera + Klasifikasi TensorRT + Sink Bridge + Collaboration Agent + Viewer):
+
+```bash
+# Menggunakan MQTT Broker Sink Node RW612 (default IP: 168.110.214.70)
+ros2 launch rice_vision mission_collaboration.launch.py
+
+# Kustomisasi broker dan robot ID:
+ros2 launch rice_vision mission_collaboration.launch.py \
+  mqtt_broker:=168.110.214.70 \
+  robot_id:=RB01 \
+  greenhouse_id:=SH01
+
+# Mode koneksi kabel Serial USB ke board RW612:
+ros2 launch rice_vision mission_collaboration.launch.py \
+  transport:=serial \
+  serial_port:=/dev/ttyACM0
 ```
 
 ## Troubleshooting

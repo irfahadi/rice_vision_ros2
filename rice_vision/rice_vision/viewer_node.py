@@ -16,6 +16,7 @@ Alur data:
                                 viewer_node  ->  jendela OpenCV
 """
 
+import json
 import time
 
 import cv2
@@ -24,6 +25,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
+from std_msgs.msg import String
 
 from rice_vision import image_codec
 from rice_vision_interfaces.msg import DetectionArray
@@ -51,6 +53,7 @@ class ViewerNode(Node):
         # ---- State ----
         self.latest_frame = None          # frame beranotasi terakhir (BGR)
         self.latest_detections = None     # DetectionArray terakhir
+        self.latest_mission_status = None # status misi terakhir
         self._last_display_time = time.monotonic()
         self._display_fps = 0.0
 
@@ -59,6 +62,8 @@ class ViewerNode(Node):
             Image, annotated_topic, self.on_image, qos_profile_sensor_data)
         self.create_subscription(
             DetectionArray, detections_topic, self.on_detections, 10)
+        self.create_subscription(
+            String, '/mission/status/raw', self.on_mission_status_raw, 10)
 
         # ---- Jendela tampilan ----
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
@@ -80,6 +85,12 @@ class ViewerNode(Node):
 
     def on_detections(self, msg: DetectionArray):
         self.latest_detections = msg
+
+    def on_mission_status_raw(self, msg: String):
+        try:
+            self.latest_mission_status = json.loads(msg.data)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     def render(self):
@@ -137,6 +148,23 @@ class ViewerNode(Node):
             put(f'Display   : {self._display_fps:5.1f} FPS',
                 (200, 200, 200), 0.55, 1)
         y += 8
+
+        # Informasi Misi & Sink Node RW612
+        if self.latest_mission_status is not None:
+            cv2.line(panel, (x, y), (self.panel_width - x, y), (80, 80, 80), 1)
+            y += line
+            put('Misi Sink RW612:', (0, 200, 255), 0.6, 1)
+            m_id = self.latest_mission_status.get('m_id', '-')
+            st = self.latest_mission_status.get('st', '-')
+            cur_t = self.latest_mission_status.get('cur_tray', 0)
+            pct = self.latest_mission_status.get('pct', 0)
+            bat = self.latest_mission_status.get('bat', 0)
+            put(f'ID   : {m_id}', (220, 220, 220), 0.5, 1)
+            st_color = (0, 255, 0) if st == 'IN_PROGRESS' else ((255, 200, 0) if st == 'COMPLETED' else (200, 200, 200))
+            put(f'Stat : {st}', st_color, 0.5, 1)
+            put(f'Tray : {cur_t} ({pct}%)', (220, 220, 220), 0.5, 1)
+            put(f'Bat  : {bat}%', (220, 220, 220), 0.5, 1)
+            y += 4
 
         # Garis pemisah
         cv2.line(panel, (x, y), (self.panel_width - x, y), (80, 80, 80), 1)

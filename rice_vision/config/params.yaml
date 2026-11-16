@@ -66,3 +66,34 @@ viewer_node:
     window_name: "Rice Vision - Deteksi Objek"
     panel_width: 320                 # lebar panel info (px) di sisi kanan
     show_display_fps: true
+
+sink_bridge_node:
+  ros__parameters:
+    transport: "mqtt"                # "mqtt" atau "serial"
+    # Konfigurasi MQTT (Sink Node NPA-VEE-RW612 / Broker SmartGreenhouse)
+    mqtt_broker: "168.110.214.70"
+    mqtt_port: 1883
+    mqtt_client_id: "rice_vision_collab_agent"
+    mqtt_username: ""
+    mqtt_password: ""
+    mqtt_keepalive: 60
+    topic_prefix: ""                 # prefix opsional (misal "gh01/")
+    topic_command: "mission/command" # Cloud -> Sink Node -> Collaboration Agent (<= 192 byte)
+    topic_status: "mission/status"   # Collaboration Agent -> Sink Node -> Cloud (<= 128 byte)
+    topic_result: "mission/result"   # Collaboration Agent -> Sink Node -> Cloud (<= 256 byte)
+    # Konfigurasi Serial UART (opsional jika Sink Node RW612 dihubungkan via USB-Serial)
+    serial_port: "/dev/ttyACM0"
+    serial_baudrate: 115200
+    serial_timeout: 1.0
+
+collaboration_agent_node:
+  ros__parameters:
+    robot_id: "RB01"                 # ID Robot Collaboration Agent (r_id)
+    greenhouse_id: "SH01"            # ID Smart Greenhouse (h_id)
+    status_interval_sec: 3.0         # Interval Ti = 2-5 s saat misi aktif
+    tray_inspection_interval_sec: 15.0 # Interval inspeksi per tray (~ 15-30 s)
+    auto_inspect: true               # Jalankan inspeksi tray secara otomatis
+    detections_topic: "/rice_vision/detections"
+    battery_initial: 84              # Tingkat baterai awal (%)
+    simulate_battery_drain: true     # Penurunan baterai perlahan saat misi aktif
+
