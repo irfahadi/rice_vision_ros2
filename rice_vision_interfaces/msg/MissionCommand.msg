@@ -6,3 +6,4 @@ string cmd         # Perintah (contoh: "INSPECT", "START", "STOP", "PAUSE", "RES
 int32[] trays      # Daftar ID tray yang harus diinspeksi (contoh: [1, 2, 3, 4])
 int32 crit_lvl     # Level kritikal/prioritas (contoh: 1)
 int64 ts           # Unix timestamp detik (contoh: 1761200010)
+

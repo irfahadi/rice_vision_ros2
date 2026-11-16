@@ -8,3 +8,4 @@ int32 pct          # Persentase kemajuan misi 0-100 (contoh: 50)
 int32 bat          # Persentase baterai robot 0-100 (contoh: 84)
 int32 seq          # Nomor urut sequence (contoh: 12)
 int64 ts           # Unix timestamp detik (contoh: 1761200045)
+

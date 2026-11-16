@@ -8,3 +8,4 @@ float32 conf       # Skor kepercayaan deteksi 0.0 - 1.0 (contoh: 0.94)
 int32 anom         # Indikator anomali (0 = normal/bagus, 1 = anomali/tidak bagus)
 int32 seq          # Nomor urut sequence hasil (contoh: 3)
 int64 ts           # Unix timestamp detik (contoh: 1761200050)
+

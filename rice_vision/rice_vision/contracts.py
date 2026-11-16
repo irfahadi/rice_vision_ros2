@@ -396,3 +396,4 @@ class MissionResult:
 def current_epoch_seconds() -> int:
     """Mengembalikan timestamp detik epoch saat ini."""
     return int(time.time())
+
