@@ -105,7 +105,7 @@ class ClassifierTRTNode(Node):
         model_path = os.path.expanduser(model_path)
         engine = self._load_or_build_engine(model_path, engine_cache)
         self.engine = engine
-        self.context = engine.create_execution_context()
+        self.trt_context = engine.create_execution_context()
 
         self._setup_bindings()
 
@@ -221,7 +221,7 @@ class ClassifierTRTNode(Node):
             # Ganti dimensi dinamis (-1) dengan 1 (batch)
             shape = [1 if d < 0 else d for d in shape]
             if engine.binding_is_input(binding):
-                self.context.set_binding_shape(idx, tuple(shape))
+                self.trt_context.set_binding_shape(idx, tuple(shape))
 
             dtype = trt.nptype(engine.get_binding_dtype(binding))
             size = int(np.prod(shape))
@@ -348,7 +348,7 @@ class ClassifierTRTNode(Node):
         cuda.memcpy_htod_async(inp['device'], inp['host'], self.stream)
 
         # Jalankan
-        self.context.execute_async_v2(
+        self.trt_context.execute_async_v2(
             bindings=self.bindings, stream_handle=self.stream.handle)
 
         # Ambil output

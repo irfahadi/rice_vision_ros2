@@ -43,7 +43,7 @@ classifier_trt_node:
   ros__parameters:
     # Path model .onnx (hasil convert dari .h5) atau .engine yang sudah jadi.
     # Isi lewat argumen launch model_path:=... atau di sini:
-    model_path: ""
+    model_path: "/home/jetson/ros2_ws/src/rice_vision_ros2/rice_vision/models/models_bibit_padi.onnx"
     # Path simpan/muat cache engine. Kosong = model_path + ".engine".
     engine_cache: ""
     image_topic: /camera/image_raw
