@@ -25,6 +25,14 @@ TOPIC_MISSION_COMMAND = 'mission/command'
 TOPIC_MISSION_STATUS = 'mission/status'
 TOPIC_MISSION_RESULT = 'mission/result'
 
+# Prefix topik sisi Collaboration Agent pada Sink Node NPA-VEE-RW612
+# (apps/SmartGreenhouse/.../MqttSubscribeService.java):
+#   Cloud  -> gh01/mission/command        -> Sink -> gh01/agent/mission/command -> Agent
+#   Agent  -> gh01/agent/mission/status   -> Sink -> gh01/mission/status        -> Cloud
+#   Agent  -> gh01/agent/mission/result   -> Sink -> gh01/mission/result        -> Cloud
+# Agent TIDAK boleh langsung memakai gh01/mission/*, karena itu sisi Cloud.
+DEFAULT_AGENT_TOPIC_PREFIX = 'gh01/agent/'
+
 # Batasan ukuran payload (dalam byte)
 MAX_BYTES_MISSION_COMMAND = 192
 MAX_BYTES_MISSION_STATUS = 128
@@ -49,6 +57,9 @@ STATUS_ERROR = 'ERROR'
 # Label klasifikasi bibit & anomali
 LABEL_BAGUS = 'BAGUS'
 LABEL_TIDAK_BAGUS = 'TIDAK BAGUS'
+# Dipakai bila tidak ada deteksi visi yang valid selama inspeksi tray.
+# anom=1 supaya Cloud menandai tray ini untuk dicek manual (bukan dianggap bagus).
+LABEL_UNKNOWN = 'UNKNOWN'
 ANOMALY_NORMAL = 0
 ANOMALY_DEFECT = 1
 

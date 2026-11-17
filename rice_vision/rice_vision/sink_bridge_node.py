@@ -10,12 +10,20 @@ Memvalidasi semua payload terhadap batas ukuran byte dan struktur schema JSON:
 - mission/command <= 192 byte
 - mission/status  <= 128 byte
 - mission/result  <= 256 byte
+
+Topik MQTT default mengikuti firmware Sink Node (SmartGreenhouse/MqttSubscribeService):
+- subscribe gh01/agent/mission/command  (di-relay Sink dari gh01/mission/command)
+- publish   gh01/agent/mission/status   (di-relay Sink ke gh01/mission/status)
+- publish   gh01/agent/mission/result   (di-relay Sink ke gh01/mission/result)
+
+Catatan: firmware RW612 saat ini hanya merelay misi lewat MQTT/WiFi. Transport
+'serial' butuh firmware yang membaca baris "mission/<x>:{json}" dari UART.
 """
 
 import json
 import threading
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import rclpy
 from rclpy.node import Node
@@ -25,6 +33,7 @@ from rice_vision.contracts import (
     MAX_BYTES_MISSION_COMMAND,
     MAX_BYTES_MISSION_RESULT,
     MAX_BYTES_MISSION_STATUS,
+    DEFAULT_AGENT_TOPIC_PREFIX,
     TOPIC_MISSION_COMMAND,
     TOPIC_MISSION_RESULT,
     TOPIC_MISSION_STATUS,
@@ -66,6 +75,18 @@ except ImportError:
     serial = None
 
 
+def _create_mqtt_client(client_id: str):
+    """Buat paho Client yang kompatibel dengan paho-mqtt 1.x dan 2.x.
+
+    paho-mqtt 2.0 mewajibkan argumen CallbackAPIVersion. VERSION1 dipilih agar
+    signature callback on_connect/on_disconnect di bawah tetap sama.
+    """
+    callback_api = getattr(mqtt, 'CallbackAPIVersion', None)
+    if callback_api is not None:
+        return mqtt.Client(callback_api.VERSION1, client_id=client_id)
+    return mqtt.Client(client_id=client_id)
+
+
 class SinkBridgeNode(Node):
     def __init__(self):
         super().__init__('sink_bridge_node')
@@ -78,7 +99,8 @@ class SinkBridgeNode(Node):
         self.declare_parameter('mqtt_username', '')
         self.declare_parameter('mqtt_password', '')
         self.declare_parameter('mqtt_keepalive', 60)
-        self.declare_parameter('topic_prefix', '')               # contoh: 'gh01/' bila diperlukan
+        # Prefix sisi agent pada Sink Node RW612 -> gh01/agent/mission/...
+        self.declare_parameter('topic_prefix', DEFAULT_AGENT_TOPIC_PREFIX)
         self.declare_parameter('topic_command', TOPIC_MISSION_COMMAND)
         self.declare_parameter('topic_status', TOPIC_MISSION_STATUS)
         self.declare_parameter('topic_result', TOPIC_MISSION_RESULT)
@@ -124,6 +146,9 @@ class SinkBridgeNode(Node):
         self.cmd_raw_pub = self.create_publisher(String, '/mission/command/raw', 10)
 
         # ---- ROS 2 Subscriptions (dari Collaboration Agent) ----
+        # collaboration_agent_node mem-publish status/result ke topic typed DAN
+        # raw (raw dipakai viewer/debug). Bridge hanya boleh berlangganan SATU
+        # jalur; kalau dua-duanya, tiap pesan terkirim dua kali ke Sink Node.
         if HAVE_CUSTOM_MSGS:
             self.create_subscription(
                 RosMissionStatus, '/mission/status', self.on_ros_status, 10
@@ -131,12 +156,13 @@ class SinkBridgeNode(Node):
             self.create_subscription(
                 RosMissionResult, '/mission/result', self.on_ros_result, 10
             )
-        self.create_subscription(
-            String, '/mission/status/raw', self.on_ros_status_raw, 10
-        )
-        self.create_subscription(
-            String, '/mission/result/raw', self.on_ros_result_raw, 10
-        )
+        else:
+            self.create_subscription(
+                String, '/mission/status/raw', self.on_ros_status_raw, 10
+            )
+            self.create_subscription(
+                String, '/mission/result/raw', self.on_ros_result_raw, 10
+            )
 
         # Inisialisasi Transport
         if self.transport == 'mqtt':
@@ -162,7 +188,7 @@ class SinkBridgeNode(Node):
             return
 
         try:
-            self.mqtt_client = mqtt.Client(client_id=self.mqtt_client_id)
+            self.mqtt_client = _create_mqtt_client(self.mqtt_client_id)
             if self.mqtt_username:
                 self.mqtt_client.username_pw_set(self.mqtt_username, self.mqtt_password)
 
@@ -200,8 +226,10 @@ class SinkBridgeNode(Node):
             f'Menerima pesan MQTT [{topic}], ukuran: {len(payload_bytes)} byte'
         )
 
-        if topic == self.t_cmd or topic.endswith(TOPIC_MISSION_COMMAND):
+        if topic == self.t_cmd:
             self._handle_incoming_command(payload_bytes)
+        else:
+            self.get_logger().warn(f'Topik MQTT tidak dikenal diabaikan: {topic}')
 
     # ------------------------------------------------------------------
     # Serial Transport
@@ -318,6 +346,11 @@ class SinkBridgeNode(Node):
                 )
 
             if self.transport == 'mqtt' and self.mqtt_client is not None:
+                if not self.is_connected:
+                    self.get_logger().warn(
+                        'MQTT belum terhubung; mission/status ini dilewati',
+                        throttle_duration_sec=10.0)
+                    return
                 self.mqtt_client.publish(self.t_status, payload_bytes, qos=0)
             elif self.transport == 'serial' and self.serial_conn is not None:
                 packet = f'{TOPIC_MISSION_STATUS}:{json_str}\n'.encode('utf-8')
