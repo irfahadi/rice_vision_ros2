@@ -12,8 +12,8 @@ venv/
 
 # Bobot model (simpan di release / cloud storage, bukan di git)
 *.pt
-*.onnx
-*.engine
+# *.onnx
+# *.engine
 
 # Hasil run Ultralytics
 runs/
