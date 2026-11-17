@@ -19,7 +19,11 @@ Contoh penggunaan:
   ros2 launch rice_vision mission_collaboration.launch.py \
       vision_type:=keras model_path:=$HOME/models/bibit_padi.h5
 
-  # Menggunakan koneksi Serial UART ke hardware board RW612:
+  # SIMULASI tanpa Jetson/GPU (onnxruntime CPU + broker lokal + video file):
+  ros2 launch rice_vision mission_collaboration.launch.py \
+      vision_type:=onnx mqtt_broker:=127.0.0.1 video_source:=/path/tray.mp4
+
+  # Menggunakan koneksi Serial UART (butuh firmware RW612 yang mendukung UART):
   ros2 launch rice_vision mission_collaboration.launch.py \
       transport:=serial serial_port:=/dev/ttyACM0
 
@@ -40,6 +44,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     pkg_share = get_package_share_directory('rice_vision')
     default_params = os.path.join(pkg_share, 'config', 'params.yaml')
+    default_onnx = os.path.join(pkg_share, 'models', 'models_bibit_padi.onnx')
 
     return LaunchDescription([
         # ---- Argumen Launch ----
@@ -48,13 +53,17 @@ def generate_launch_description():
             description='Path file konfigurasi YAML parameter'),
         DeclareLaunchArgument(
             'vision_type', default_value='trt',
-            description='Tipe inferensi visi: trt (TensorRT), keras (.h5), atau yolo (.pt)'),
+            description='Tipe inferensi visi: trt (TensorRT), onnx (onnxruntime CPU), '
+                        'keras (.h5), atau yolo (.pt)'),
         DeclareLaunchArgument(
             'model_path', default_value='',
             description='Path custom model inferensi (kosong = ikuti params.yaml)'),
         DeclareLaunchArgument(
             'camera_id', default_value='0',
             description='Index perangkat kamera (/dev/video0)'),
+        DeclareLaunchArgument(
+            'video_source', default_value='',
+            description='Simulasi: path video/pola gambar pengganti webcam (kosong = webcam)'),
         DeclareLaunchArgument(
             'viewer', default_value='true',
             description='Tampilkan visualizer GUI OpenCV (true/false)'),
@@ -68,7 +77,7 @@ def generate_launch_description():
             'robot_id', default_value='RB01',
             description='ID Collaboration Agent Robot'),
         DeclareLaunchArgument(
-            'greenhouse_id', default_value='SH01',
+            'greenhouse_id', default_value='GH01',
             description='ID Smart Greenhouse'),
 
         # ---- Node Kamera ----
@@ -79,7 +88,8 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 LaunchConfiguration('params_file'),
-                {'camera_id': LaunchConfiguration('camera_id')},
+                {'camera_id': LaunchConfiguration('camera_id'),
+                 'video_source': LaunchConfiguration('video_source')},
             ],
         ),
 
@@ -95,6 +105,23 @@ def generate_launch_description():
             parameters=[
                 LaunchConfiguration('params_file'),
                 {'model_path': LaunchConfiguration('model_path')},
+            ],
+        ),
+
+        # ---- Node Visi: ONNX Runtime (CPU, simulasi/laptop) ----
+        Node(
+            package='rice_vision',
+            executable='classifier_onnx_node',
+            name='classifier_onnx_node',
+            output='screen',
+            condition=IfCondition(
+                PythonExpression(["'", LaunchConfiguration('vision_type'), "' == 'onnx'"])
+            ),
+            parameters=[
+                LaunchConfiguration('params_file'),
+                {'model_path': PythonExpression([
+                    "'", LaunchConfiguration('model_path'), "' or '",
+                    default_onnx, "'"])},
             ],
         ),
 

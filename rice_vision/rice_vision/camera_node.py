@@ -30,6 +30,10 @@ class CameraNode(Node):
         self.declare_parameter('frame_height', 480)
         self.declare_parameter('image_topic', '/camera/image_raw')
         self.declare_parameter('frame_id', 'camera_optical_frame')
+        # Simulasi tanpa webcam: path file video (mp4/avi) atau pola gambar
+        # OpenCV (mis. /data/tray_%03d.jpg). Kosong = pakai camera_id.
+        # Sumber file diputar ulang (loop) saat habis.
+        self.declare_parameter('video_source', '')
 
         camera_id = self.get_parameter('camera_id').value
         frame_rate = self.get_parameter('frame_rate').value
@@ -37,14 +41,18 @@ class CameraNode(Node):
         height = self.get_parameter('frame_height').value
         image_topic = self.get_parameter('image_topic').value
         self.frame_id = self.get_parameter('frame_id').value
+        video_source = str(self.get_parameter('video_source').value)
+        self.loop_source = bool(video_source)
+        source = video_source if video_source else camera_id
 
         # ---- OpenCV capture ----
-        self.cap = cv2.VideoCapture(camera_id)
+        self.cap = cv2.VideoCapture(source)
         if not self.cap.isOpened():
             self.get_logger().error(
-                f'Tidak bisa membuka kamera id={camera_id}. '
-                'Cek apakah kamera terpasang (ls /dev/video*).')
-            raise RuntimeError(f'Cannot open camera {camera_id}')
+                f'Tidak bisa membuka sumber kamera "{source}". '
+                'Cek apakah kamera terpasang (ls /dev/video*) atau path video benar.')
+            raise RuntimeError(f'Cannot open camera {source}')
+        camera_id = source
 
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
@@ -61,6 +69,9 @@ class CameraNode(Node):
 
     def capture_and_publish(self):
         ret, frame = self.cap.read()
+        if not ret and self.loop_source:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ret, frame = self.cap.read()
         if not ret:
             self.get_logger().warn('Gagal membaca frame dari kamera.',
                                    throttle_duration_sec=5.0)

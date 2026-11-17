@@ -28,7 +28,7 @@ beranotasi kembali ke jaringan ROS.
 | Package | Tipe | Fungsi |
 |---|---|---|
 | `rice_vision_interfaces` | ament_cmake (msg) | Pesan custom `Detection`, `DetectionArray`, `MissionCommand`, `MissionStatus`, & `MissionResult` |
-| `rice_vision` | ament_python | `camera_node` (webcam), `detector_node` (YOLOv8 .pt), `classifier_node` (Keras .h5), `classifier_trt_node` (TensorRT .onnx), `viewer_node` (jendela tampilan), `sink_bridge_node` (bridge Sink Node RW612), & `collaboration_agent_node` (pengelola misi inspeksi) |
+| `rice_vision` | ament_python | `camera_node` (webcam), `detector_node` (YOLOv8 .pt), `classifier_node` (Keras .h5), `classifier_trt_node` (TensorRT .onnx), `classifier_onnx_node` (onnxruntime CPU, untuk simulasi/laptop), `viewer_node` (jendela tampilan), `sink_bridge_node` (bridge Sink Node RW612), & `collaboration_agent_node` (pengelola misi inspeksi) |
 
 ## Prasyarat
 
@@ -298,44 +298,104 @@ Modul integrasi ini menghubungkan **Collaboration Agent (Robot/Jetson)** dengan 
 
 | Topik / Arah | Format Payload (JSON) | Batasan & Karakteristik |
 |---|---|---|
-| `mission/command`<br>`Cloud → Sink Node → Collaboration Agent` | `{"m_id":"M20261023-01", "h_id":"SH01", "cmd":"INSPECT", "trays":[1,2,3,4], "crit_lvl":1, "ts":1761200010}` | **≤ 192 byte**<br>*(event-driven saat penugasan)* |
+| `mission/command`<br>`Cloud → Sink Node → Collaboration Agent` | `{"m_id":"M20261023-01", "h_id":"GH01", "cmd":"INSPECT", "trays":[1,2,3,4], "crit_lvl":1, "ts":1761200010}` | **≤ 192 byte**<br>*(event-driven saat penugasan)* |
 | `mission/status`<br>`Collaboration Agent → Sink Node → Cloud` | `{"m_id":"M20261023-01", "r_id":"RB01", "st":"IN_PROGRESS", "cur_tray":3, "pct":50, "bat":84, "seq":12, "ts":1761200045}` | **≤ 128 byte**<br>*(interval Ti = 2–5 s saat misi aktif)* |
-| `mission/result`<br>`Collaboration Agent → Sink Node → Cloud` | `{"m_id":"M20261023-01", "h_id":"SH01", "tray_id":3, "label":"BAGUS", "conf":0.94, "anom":0, "seq":3, "ts":1761200050}` | **≤ 256 byte**<br>*(event-driven per tray, ≈ 15–30 s)* |
+| `mission/result`<br>`Collaboration Agent → Sink Node → Cloud` | `{"m_id":"M20261023-01", "h_id":"GH01", "tray_id":3, "label":"BAGUS", "conf":0.94, "anom":0, "seq":3, "ts":1761200050}` | **≤ 256 byte**<br>*(event-driven per tray, ≈ 15–30 s)* |
+
+### Topik MQTT (harus cocok dengan firmware Sink Node)
+
+Firmware `apps/SmartGreenhouse/.../MqttSubscribeService.java` di repo
+`npa-vee-rw612` **merelay** pesan misi antara sisi Cloud dan sisi agent.
+Agent hanya boleh memakai topik `gh01/agent/...`:
+
+| Arah | Cloud | Sink Node merelay ke/dari | Collaboration Agent (`sink_bridge_node`) |
+|---|---|---|---|
+| command | publish `gh01/mission/command` | → `gh01/agent/mission/command` | **subscribe** `gh01/agent/mission/command` |
+| status | subscribe `gh01/mission/status` | ← `gh01/agent/mission/status` | **publish** `gh01/agent/mission/status` |
+| result | subscribe `gh01/mission/result` | ← `gh01/agent/mission/result` | **publish** `gh01/agent/mission/result` |
+
+Default `sink_bridge_node` sudah `topic_prefix: "gh01/agent/"` dan
+`greenhouse_id: "GH01"` (sama dengan `HOUSE_ID` firmware). Sink Node membuang
+pesan yang melebihi batas byte atau tidak punya `m_id` (+ `cmd`/`st`/`tray_id`),
+memakai QoS 0, dan tidak mem-buffer saat offline. Firmware saat ini hanya
+merelay misi lewat MQTT/WiFi; `transport:=serial` baru berguna bila firmware
+RW612 ditambah pembaca UART `mission/<x>:{json}`.
 
 ### Node Pendukung
 
 1. **`sink_bridge_node`**:
-   - Menjembatani pesan antara ROS 2 topic dengan Sink Node via MQTT (default) atau Serial UART.
-   - Memvalidasi schema JSON dan batasan ukuran byte sesuai kontrak data.
-   - Topik ROS 2:
-     - Subscribe: `/mission/status` (`MissionStatus`), `/mission/result` (`MissionResult`), `/mission/status/raw`, `/mission/result/raw`
-     - Publish: `/mission/command` (`MissionCommand`), `/mission/command/raw` (`std_msgs/String`)
+   - Menjembatani topic ROS 2 dengan Sink Node via MQTT (default) atau Serial UART.
+   - Memvalidasi schema JSON dan batas ukuran byte sesuai kontrak data.
+   - Kompatibel paho-mqtt 1.6.x dan 2.x.
+   - ROS 2: subscribe `/mission/status` & `/mission/result` (typed; fallback ke
+     `/mission/*/raw` hanya bila `rice_vision_interfaces` tidak ada), publish
+     `/mission/command` (typed) dan `/mission/command/raw` (debug).
 
 2. **`collaboration_agent_node`**:
-   - Menangani siklus hidup misi inspeksi (`IN_PROGRESS`, `PAUSED`, `COMPLETED`, `ABORTED`).
-   - Memancarkan status berkala `mission/status` (setiap 2–5 detik).
-   - Menghubungkan deteksi visi dari `/rice_vision/detections` untuk mengklasifikasikan tiap tray (`BAGUS` / `TIDAK BAGUS`).
-   - Memancarkan `mission/result` per tray setelah evaluasi selesai (~ 15–30 s).
+   - Siklus misi `IN_PROGRESS` / `PAUSED` / `COMPLETED` / `ABORTED`; perintah
+     PAUSE/RESUME/STOP/ABORT hanya berlaku untuk `m_id` misi aktif; command
+     duplikat (kirim ulang/redelivery) diabaikan.
+   - Status berkala `mission/status` (2–5 s).
+   - Per tray: mengumpulkan deteksi `/rice_vision/detections` **selama tray itu
+     diinspeksi** (`tray_inspection_interval_sec`), lalu voting mayoritas →
+     `BAGUS` / `TIDAK BAGUS`, conf = rata-rata conf label pemenang.
+   - Bila tidak ada deteksi sama sekali, menunggu `detection_grace_sec`, lalu
+     mengirim `label="UNKNOWN", conf=0.0, anom=1` (perlu dicek manual) — tidak
+     pernah mengarang hasil "BAGUS".
+   - `auto_inspect: true` → tray berurutan. `auto_inspect: false` → menunggu
+     `/mission/trigger_tray` (`std_msgs/Int32`, tray_id) dari sistem navigasi saat
+     robot tiba di tray. `/mission/step_tray` (`std_msgs/Empty`) memaksa evaluasi.
 
 ### Menjalankan Mission Collaboration
 
-Jalankan seluruh pipeline terintegrasi (Kamera + Klasifikasi TensorRT + Sink Bridge + Collaboration Agent + Viewer):
-
 ```bash
-# Menggunakan MQTT Broker Sink Node RW612 (default IP: 168.110.214.70)
+# Hardware: Jetson + TensorRT, broker Sink Node RW612 (default 168.110.214.70)
 ros2 launch rice_vision mission_collaboration.launch.py
 
 # Kustomisasi broker dan robot ID:
 ros2 launch rice_vision mission_collaboration.launch.py \
-  mqtt_broker:=168.110.214.70 \
-  robot_id:=RB01 \
-  greenhouse_id:=SH01
+  mqtt_broker:=168.110.214.70 robot_id:=RB01 greenhouse_id:=GH01
 
-# Mode koneksi kabel Serial USB ke board RW612:
+# Tanpa GPU (laptop): model .onnx yang sama via onnxruntime, video sebagai kamera
+pip install onnxruntime
 ros2 launch rice_vision mission_collaboration.launch.py \
-  transport:=serial \
-  serial_port:=/dev/ttyACM0
+  vision_type:=onnx mqtt_broker:=127.0.0.1 video_source:=$HOME/tray_test.mp4
 ```
+
+Uji manual dari sisi Cloud (dengan `mosquitto-clients`):
+
+```bash
+mosquitto_sub -h 168.110.214.70 -t 'gh01/mission/#' -v
+```
+
+```bash
+mosquitto_pub -h 168.110.214.70 -t gh01/mission/command \
+  -m '{"m_id":"M20261023-01","h_id":"GH01","cmd":"INSPECT","trays":[1,2],"crit_lvl":1,"ts":1761200010}'
+```
+
+### Simulasi integrasi sebelum ke hardware (`sim/`)
+
+`sim/run_integration_sim.py` menjalankan **Cloud palsu ↔ firmware Sink Node
+RW612 (kode Java asli, di JVM) ↔ node rice_vision asli** lewat broker
+Mosquitto lokal, memakai model `models_bibit_padi.onnx`. ROS 2 diganti shim
+in-process (`sim/fake_ros`), kamera diganti gambar sintetis per tray.
+
+```bash
+sudo apt install mosquitto default-jdk zip
+pip install paho-mqtt onnxruntime opencv-python numpy
+# build simulator Sink Node dari repo firmware (sekali)
+sim/rw612_sink/build.sh ../npa-vee-rw612
+python3 sim/run_integration_sim.py          # 5 skenario, exit code 0 = lulus
+```
+
+Skenario: alur normal 3 tray, kamera mati (UNKNOWN), PAUSE/RESUME/ABORT,
+mode trigger navigasi, payload tidak valid & command duplikat. Waktu dipercepat
+(tray 3 s, status 2 s). Yang **tidak** diuji simulasi: ROS 2/DDS asli, launch
+file, TensorRT di Jetson, WiFi/broker produksi, dan **akurasi model** (gambar
+sintetis bukan foto bibit; uji akurasi dengan foto/video tray asli via
+`video_source`).
+
+Unit test cepat (tanpa broker/ROS): `python3 -m pytest tests`.
 
 ## Troubleshooting
 
