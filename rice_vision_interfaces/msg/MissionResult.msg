@@ -1,0 +1,11 @@
+# Kontrak data mission/result (Collaboration Agent -> Sink Node -> Cloud)
+# Maksimal <= 256 byte, event-driven per tray (~ 15-30 s)
+string m_id        # ID Misi (contoh: "M20261023-01")
+string h_id        # ID Greenhouse / House (contoh: "SH01")
+int32 tray_id      # ID Tray yang diinspeksi (contoh: 3)
+string label       # Label klasifikasi visi (contoh: "BAGUS", "TIDAK BAGUS")
+float32 conf       # Skor kepercayaan deteksi 0.0 - 1.0 (contoh: 0.94)
+int32 anom         # Indikator anomali (0 = normal/bagus, 1 = anomali/tidak bagus)
+int32 seq          # Nomor urut sequence hasil (contoh: 3)
+int64 ts           # Unix timestamp detik (contoh: 1761200050)
+

@@ -6,6 +6,7 @@ camera_node:
     frame_height: 480
     image_topic: /camera/image_raw
     frame_id: camera_optical_frame
+    video_source: ""                 # simulasi: path video / pola gambar (kosong = webcam)
 
 detector_node:
   ros__parameters:
@@ -59,6 +60,21 @@ classifier_trt_node:
     publish_annotated: true
     max_classification_rate: 30.0
 
+classifier_onnx_node:
+  ros__parameters:
+    # Simulasi / laptop tanpa GPU: model .onnx yang sama, dijalankan onnxruntime (CPU)
+    model_path: ""                   # kosong -> launch mengisi models/models_bibit_padi.onnx
+    image_topic: /camera/image_raw
+    results_topic: /rice_vision/detections
+    annotated_topic: /rice_vision/annotated_image
+    class_names: ["Bibit Padi (Bagus)", "Bibit Padi (Tidak Bagus)"]
+    input_width: 0
+    input_height: 0
+    layout: "auto"
+    threshold: 0.5
+    publish_annotated: true
+    max_classification_rate: 10.0
+
 viewer_node:
   ros__parameters:
     annotated_topic: /rice_vision/annotated_image
@@ -66,3 +82,37 @@ viewer_node:
     window_name: "Rice Vision - Deteksi Objek"
     panel_width: 320                 # lebar panel info (px) di sisi kanan
     show_display_fps: true
+
+sink_bridge_node:
+  ros__parameters:
+    transport: "mqtt"                # "mqtt" atau "serial"
+    # Konfigurasi MQTT (Sink Node NPA-VEE-RW612 / Broker SmartGreenhouse)
+    mqtt_broker: "168.110.214.70"
+    mqtt_port: 1883
+    mqtt_client_id: "rice_vision_collab_agent"   # harus unik (Sink Node memakai "clientku")
+    mqtt_username: ""
+    mqtt_password: ""
+    mqtt_keepalive: 60
+    # Harus cocok dengan firmware Sink Node RW612 (MqttSubscribeService.java):
+    #   sub gh01/agent/mission/command, pub gh01/agent/mission/status|result
+    topic_prefix: "gh01/agent/"
+    topic_command: "mission/command" # Cloud -> Sink Node -> Collaboration Agent (<= 192 byte)
+    topic_status: "mission/status"   # Collaboration Agent -> Sink Node -> Cloud (<= 128 byte)
+    topic_result: "mission/result"   # Collaboration Agent -> Sink Node -> Cloud (<= 256 byte)
+    # Konfigurasi Serial UART (opsional jika Sink Node RW612 dihubungkan via USB-Serial)
+    serial_port: "/dev/ttyACM0"
+    serial_baudrate: 115200
+    serial_timeout: 1.0
+
+collaboration_agent_node:
+  ros__parameters:
+    robot_id: "RB01"                 # ID Robot Collaboration Agent (r_id)
+    greenhouse_id: "GH01"            # ID Smart Greenhouse (h_id), sama dgn HOUSE_ID Sink Node
+    status_interval_sec: 3.0         # Interval Ti = 2-5 s saat misi aktif
+    tray_inspection_interval_sec: 15.0 # Interval inspeksi per tray (~ 15-30 s)
+    detection_grace_sec: 10.0        # tunggu ekstra bila tray belum punya deteksi -> lalu UNKNOWN
+    auto_inspect: true               # true: tray berurutan; false: tunggu /mission/trigger_tray
+    detections_topic: "/rice_vision/detections"
+    battery_initial: 84              # Tingkat baterai awal (%)
+    simulate_battery_drain: true     # Penurunan baterai perlahan saat misi aktif
+
