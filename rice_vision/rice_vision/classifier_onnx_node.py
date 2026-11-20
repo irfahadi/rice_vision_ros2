@@ -25,6 +25,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
+from std_msgs.msg import String
 
 from rice_vision import image_codec
 from rice_vision_interfaces.msg import Detection, DetectionArray
@@ -87,6 +88,7 @@ class ClassifierONNXNode(Node):
         self.declare_parameter('threshold', 0.5)
         self.declare_parameter('publish_annotated', True)
         self.declare_parameter('max_classification_rate', 10.0)
+        self.declare_parameter('sync_with_scanner', True)
 
         model_path = os.path.expanduser(str(self.get_parameter('model_path').value))
         image_topic = self.get_parameter('image_topic').value
@@ -98,6 +100,8 @@ class ClassifierONNXNode(Node):
         layout = str(self.get_parameter('layout').value).lower()
         self.threshold = float(self.get_parameter('threshold').value)
         self.publish_annotated = bool(self.get_parameter('publish_annotated').value)
+        self.sync_with_scanner = bool(self.get_parameter('sync_with_scanner').value)
+        self.scan_phase = 'UPRIGHT'
         max_rate = float(self.get_parameter('max_classification_rate').value)
         self.min_interval = (1.0 / max_rate) if max_rate > 0 else 0.0
         self.last_inference_time = 0.0
@@ -125,13 +129,25 @@ class ClassifierONNXNode(Node):
         self.results_pub = self.create_publisher(DetectionArray, results_topic, 10)
         self.annotated_pub = self.create_publisher(Image, annotated_topic, qos_profile_sensor_data)
         self.create_subscription(Image, image_topic, self.image_callback, qos_profile_sensor_data)
+        self.create_subscription(String, '/scan_phase', self._on_scan_phase, 10)
 
         self.get_logger().info(
             f'Classifier ONNX Runtime aktif: {os.path.basename(model_path)} input '
             f'{self.in_w}x{self.in_h} ({self.layout.upper()}), provider '
             f'{self.session.get_providers()[0]}. "{image_topic}" -> "{results_topic}"')
 
+    def _on_scan_phase(self, msg: String):
+        self.scan_phase = msg.data.strip()
+
     def image_callback(self, msg: Image):
+        # Jika sinkronisasi scanner aktif dan robot tidak sedang memindai baki (FORWARD_SCANNING):
+        # Lewatkan frame langsung ke annotated_image (agar RViz menampilkan kamera standby),
+        # tanpa menjalankan inferensi / mem-publish deteksi bibit palsu.
+        if self.sync_with_scanner and self.scan_phase != 'FORWARD_SCANNING':
+            if self.publish_annotated:
+                self.annotated_pub.publish(msg)
+            return
+
         now = time.monotonic()
         if self.min_interval > 0 and (now - self.last_inference_time) < self.min_interval:
             return

@@ -74,11 +74,20 @@ def generate_launch_description():
             'mqtt_broker', default_value='168.110.214.70',
             description='Alamat IP/Host MQTT Broker Sink Node RW612'),
         DeclareLaunchArgument(
+            'mqtt_port', default_value='1883',
+            description='Port MQTT Broker'),
+        DeclareLaunchArgument(
             'robot_id', default_value='RB01',
             description='ID Collaboration Agent Robot'),
         DeclareLaunchArgument(
             'greenhouse_id', default_value='GH01',
             description='ID Smart Greenhouse'),
+        DeclareLaunchArgument(
+            'tray_inspection_interval_sec', default_value='15.0',
+            description='Durasi pengumpulan sampel per tray (detik)'),
+        DeclareLaunchArgument(
+            'auto_inspect', default_value='true',
+            description='Inspeksi tray berurutan secara otomatis (true/false)'),
 
         # ---- Node Kamera ----
         Node(
@@ -104,7 +113,9 @@ def generate_launch_description():
             ),
             parameters=[
                 LaunchConfiguration('params_file'),
-                {'model_path': LaunchConfiguration('model_path')},
+                {'model_path': PythonExpression([
+                    "'", LaunchConfiguration('model_path'), "' or '",
+                    default_onnx, "'"])},
             ],
         ),
 
@@ -166,6 +177,8 @@ def generate_launch_description():
                 {
                     'transport': LaunchConfiguration('transport'),
                     'mqtt_broker': LaunchConfiguration('mqtt_broker'),
+                    'mqtt_port': LaunchConfiguration('mqtt_port'),
+                    'greenhouse_id': LaunchConfiguration('greenhouse_id'),
                 },
             ],
         ),
@@ -181,6 +194,8 @@ def generate_launch_description():
                 {
                     'robot_id': LaunchConfiguration('robot_id'),
                     'greenhouse_id': LaunchConfiguration('greenhouse_id'),
+                    'tray_inspection_interval_sec': LaunchConfiguration('tray_inspection_interval_sec'),
+                    'auto_inspect': LaunchConfiguration('auto_inspect'),
                 },
             ],
         ),

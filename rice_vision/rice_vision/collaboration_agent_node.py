@@ -140,6 +140,7 @@ class CollaborationAgentNode(Node):
         self.declare_parameter('detections_topic', '/rice_vision/detections')
         self.declare_parameter('battery_initial', 84)
         self.declare_parameter('simulate_battery_drain', True)
+        self.declare_parameter('min_samples_for_finish', 0)
 
         self.robot_id = str(self.get_parameter('robot_id').value)
         self.greenhouse_id = str(self.get_parameter('greenhouse_id').value)
@@ -150,6 +151,7 @@ class CollaborationAgentNode(Node):
         detections_topic = str(self.get_parameter('detections_topic').value)
         self.battery_lvl = int(self.get_parameter('battery_initial').value)
         self.sim_bat = bool(self.get_parameter('simulate_battery_drain').value)
+        self.min_samples_for_finish = int(self.get_parameter('min_samples_for_finish').value)
 
         # Batasi status_interval dalam batas kontrak (2.0 - 5.0 s)
         if self.status_interval < 2.0 or self.status_interval > 5.0:
@@ -428,7 +430,10 @@ class CollaborationAgentNode(Node):
         if self.state != STATUS_IN_PROGRESS or not self.tray_active:
             return
         elapsed = self._now() - self.tray_started_at
-        if elapsed < self.tray_interval:
+        can_finish = (elapsed >= self.tray_interval) or (
+            self.min_samples_for_finish > 0 and len(self.tray_samples) >= self.min_samples_for_finish
+        )
+        if not can_finish:
             return
         if not self.tray_samples and elapsed < self.tray_interval + self.detection_grace:
             self.get_logger().warn(
@@ -551,6 +556,11 @@ class CollaborationAgentNode(Node):
         best = max(msg.detections, key=lambda d: d.confidence)
         label, anom = classify_label(best.class_name)
         self.tray_samples.append((label, float(best.confidence), anom))
+        self.get_logger().info(
+            f'Tray {self.current_tray_id}: sampel ke-{len(self.tray_samples)} deteksi visi '
+            f'(label={label}, conf={float(best.confidence):.2f})',
+            throttle_duration_sec=3.0,
+        )
 
     def on_battery_state(self, msg):
         pct = float(msg.percentage)

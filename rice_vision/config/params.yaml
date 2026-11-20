@@ -95,6 +95,8 @@ sink_bridge_node:
     mqtt_keepalive: 60
     # Harus cocok dengan firmware Sink Node RW612 (MqttSubscribeService.java):
     #   sub gh01/agent/mission/command, pub gh01/agent/mission/status|result
+    greenhouse_id: "GH01"
+    publish_direct_cloud: true
     topic_prefix: "gh01/agent/"
     topic_command: "mission/command" # Cloud -> Sink Node -> Collaboration Agent (<= 192 byte)
     topic_status: "mission/status"   # Collaboration Agent -> Sink Node -> Cloud (<= 128 byte)

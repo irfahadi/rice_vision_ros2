@@ -104,6 +104,8 @@ class SinkBridgeNode(Node):
         self.declare_parameter('topic_command', TOPIC_MISSION_COMMAND)
         self.declare_parameter('topic_status', TOPIC_MISSION_STATUS)
         self.declare_parameter('topic_result', TOPIC_MISSION_RESULT)
+        self.declare_parameter('greenhouse_id', 'GH01')
+        self.declare_parameter('publish_direct_cloud', True)
 
         self.declare_parameter('serial_port', '/dev/ttyACM0')    # port hardware Sink Node RW612
         self.declare_parameter('serial_baudrate', 115200)
@@ -118,10 +120,31 @@ class SinkBridgeNode(Node):
         self.mqtt_password = str(self.get_parameter('mqtt_password').value)
         self.mqtt_keepalive = int(self.get_parameter('mqtt_keepalive').value)
         self.topic_prefix = str(self.get_parameter('topic_prefix').value)
+        self.greenhouse_id = str(self.get_parameter('greenhouse_id').value)
+        self.publish_direct_cloud = bool(self.get_parameter('publish_direct_cloud').value)
 
         self.t_cmd = self.topic_prefix + str(self.get_parameter('topic_command').value)
         self.t_status = self.topic_prefix + str(self.get_parameter('topic_status').value)
         self.t_result = self.topic_prefix + str(self.get_parameter('topic_result').value)
+
+        gh = self.greenhouse_id.strip()
+        gh_lower = gh.lower()
+        gh_upper = gh.upper()
+        cmd_leaf = str(self.get_parameter('topic_command').value)
+
+        # Susun daftar topik command yang akan disubscribe agar pesan misi
+        # diterima baik dari Sink Node relay (gh01/agent/...) maupun direct Cloud:
+        candidates = [
+            self.t_cmd,
+            f'{gh_lower}/{cmd_leaf}',
+            f'{gh_lower}/agent/{cmd_leaf}',
+            f'{gh_upper}/{cmd_leaf}',
+            f'{gh_upper}/agent/{cmd_leaf}',
+            cmd_leaf,
+            f'+/{cmd_leaf}',
+            f'+/agent/{cmd_leaf}',
+        ]
+        self.cmd_sub_topics = list(dict.fromkeys([t for t in candidates if t]))
 
         self.serial_port = str(self.get_parameter('serial_port').value)
         self.serial_baudrate = int(self.get_parameter('serial_baudrate').value)
@@ -209,15 +232,19 @@ class SinkBridgeNode(Node):
     def _on_mqtt_connect(self, client, userdata, flags, rc):
         if rc == 0:
             self.is_connected = True
-            self.get_logger().info(f'Terhubung ke Sink Node MQTT Broker! Subscribing {self.t_cmd} ...')
-            client.subscribe(self.t_cmd, qos=1)
+            self.get_logger().info(
+                f'Terhubung ke MQTT Broker ({self.mqtt_broker}:{self.mqtt_port})!'
+            )
+            for topic in self.cmd_sub_topics:
+                client.subscribe(topic, qos=1)
+            self.get_logger().info(f'Subscribed ke topik command: {self.cmd_sub_topics}')
         else:
             self.is_connected = False
             self.get_logger().warn(f'Koneksi MQTT gagal dengan kode hasil: {rc}')
 
     def _on_mqtt_disconnect(self, client, userdata, rc):
         self.is_connected = False
-        self.get_logger().warn(f'Terputus dari Sink Node MQTT Broker (rc={rc}). Menunggu reconnect...')
+        self.get_logger().warn(f'Terputus dari MQTT Broker (rc={rc}). Menunggu reconnect...')
 
     def _on_mqtt_message(self, client, userdata, msg):
         payload_bytes = msg.payload
@@ -226,7 +253,14 @@ class SinkBridgeNode(Node):
             f'Menerima pesan MQTT [{topic}], ukuran: {len(payload_bytes)} byte'
         )
 
-        if topic == self.t_cmd:
+        is_cmd = (
+            topic in self.cmd_sub_topics
+            or topic == self.t_cmd
+            or topic.endswith('mission/command')
+            or topic.endswith('/mission/command')
+            or topic == 'mission/command'
+        )
+        if is_cmd:
             self._handle_incoming_command(payload_bytes)
         else:
             self.get_logger().warn(f'Topik MQTT tidak dikenal diabaikan: {topic}')
@@ -351,7 +385,17 @@ class SinkBridgeNode(Node):
                         'MQTT belum terhubung; mission/status ini dilewati',
                         throttle_duration_sec=10.0)
                     return
+                # Publish ke topic agent (mis. gh01/agent/mission/status)
                 self.mqtt_client.publish(self.t_status, payload_bytes, qos=0)
+
+                # Jika direct cloud aktif, kirim juga ke topic cloud (mis. gh01/mission/status dan mission/status)
+                if self.publish_direct_cloud:
+                    gh_lower = self.greenhouse_id.lower()
+                    direct_topic = f'{gh_lower}/{self.get_parameter("topic_status").value}'
+                    if direct_topic != self.t_status:
+                        self.mqtt_client.publish(direct_topic, payload_bytes, qos=0)
+                    if TOPIC_MISSION_STATUS not in (self.t_status, direct_topic):
+                        self.mqtt_client.publish(TOPIC_MISSION_STATUS, payload_bytes, qos=0)
             elif self.transport == 'serial' and self.serial_conn is not None:
                 packet = f'{TOPIC_MISSION_STATUS}:{json_str}\n'.encode('utf-8')
                 self.serial_conn.write(packet)
@@ -398,7 +442,17 @@ class SinkBridgeNode(Node):
                 )
 
             if self.transport == 'mqtt' and self.mqtt_client is not None:
+                # Publish ke topic agent (mis. gh01/agent/mission/result)
                 self.mqtt_client.publish(self.t_result, payload_bytes, qos=1)
+
+                # Jika direct cloud aktif, kirim juga ke topic cloud (mis. gh01/mission/result dan mission/result)
+                if self.publish_direct_cloud:
+                    gh_lower = self.greenhouse_id.lower()
+                    direct_topic = f'{gh_lower}/{self.get_parameter("topic_result").value}'
+                    if direct_topic != self.t_result:
+                        self.mqtt_client.publish(direct_topic, payload_bytes, qos=1)
+                    if TOPIC_MISSION_RESULT not in (self.t_result, direct_topic):
+                        self.mqtt_client.publish(TOPIC_MISSION_RESULT, payload_bytes, qos=1)
             elif self.transport == 'serial' and self.serial_conn is not None:
                 packet = f'{TOPIC_MISSION_RESULT}:{json_str}\n'.encode('utf-8')
                 self.serial_conn.write(packet)
