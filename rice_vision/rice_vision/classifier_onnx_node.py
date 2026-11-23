@@ -107,6 +107,25 @@ class ClassifierONNXNode(Node):
         self.last_inference_time = 0.0
 
         if not model_path or not os.path.isfile(model_path):
+            candidates = [
+                model_path,
+                os.path.expanduser('~/ros2_ws/src/rice_vision_ros2/rice_vision/models/models_bibit_padi.onnx'),
+                os.path.expanduser('~/ros2_ws/install/rice_vision/share/rice_vision/models/models_bibit_padi.onnx'),
+                '/home/jetson/ros2_ws/src/rice_vision_ros2/rice_vision/models/models_bibit_padi.onnx',
+                '/home/tesis/ros2_ws/src/rice_vision_ros2/rice_vision/models/models_bibit_padi.onnx',
+            ]
+            try:
+                from ament_index_python.packages import get_package_share_directory
+                pkg = get_package_share_directory('rice_vision')
+                candidates.insert(0, os.path.join(pkg, 'models', 'models_bibit_padi.onnx'))
+            except Exception:
+                pass
+            for c in candidates:
+                if c and os.path.isfile(c):
+                    model_path = c
+                    break
+
+        if not model_path or not os.path.isfile(model_path):
             self.get_logger().fatal(
                 f'model_path tidak valid: "{model_path}". Contoh:\n'
                 '  model_path:=.../rice_vision/models/models_bibit_padi.onnx')
