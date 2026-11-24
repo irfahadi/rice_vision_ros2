@@ -194,6 +194,8 @@ def evaluate_nodes(context, *args, **kwargs):
                     'greenhouse_id': greenhouse_id,
                     'publish_direct_cloud': True,
                 },
+                # Pastikan mqtt_broker dari argument launch selalu menang:
+                {'mqtt_broker': mqtt_broker, 'mqtt_port': mqtt_port, 'greenhouse_id': greenhouse_id},
             ],
         )
     )

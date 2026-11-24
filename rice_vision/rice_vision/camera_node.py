@@ -70,7 +70,15 @@ class CameraNode(Node):
             self.get_logger().info('Mode kamera: DUMMY (gambar sintetis bibit padi)')
         else:
             try:
-                self.cap = cv2.VideoCapture(source)
+                # Buka kamera fisik via V4L2 backend (NVIDIA Jetson / Linux)
+                if isinstance(source, int) or (isinstance(source, str) and (source.startswith('/dev/video') or source.isdigit())):
+                    cam_idx = int(source.replace('/dev/video', '')) if isinstance(source, str) else source
+                    self.cap = cv2.VideoCapture(cam_idx, cv2.CAP_V4L2)
+                    if not self.cap.isOpened():
+                        self.cap = cv2.VideoCapture(cam_idx)
+                else:
+                    self.cap = cv2.VideoCapture(source)
+
                 if not self.cap.isOpened():
                     if dummy_fallback:
                         self.get_logger().warn(

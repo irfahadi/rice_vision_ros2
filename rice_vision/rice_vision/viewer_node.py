@@ -61,6 +61,8 @@ class ViewerNode(Node):
         self.create_subscription(
             Image, annotated_topic, self.on_image, qos_profile_sensor_data)
         self.create_subscription(
+            Image, '/camera/image_raw', self.on_raw_image, qos_profile_sensor_data)
+        self.create_subscription(
             DetectionArray, detections_topic, self.on_detections, 10)
         self.create_subscription(
             String, '/mission/status/raw', self.on_mission_status_raw, 10)
@@ -82,6 +84,13 @@ class ViewerNode(Node):
         except Exception as exc:  # noqa: BLE001
             self.get_logger().warn(f'Gagal decode gambar: {exc}',
                                    throttle_duration_sec=5.0)
+
+    def on_raw_image(self, msg: Image):
+        if self.latest_frame is None:
+            try:
+                self.latest_frame = image_codec.imgmsg_to_cv2(msg)
+            except Exception:
+                pass
 
     def on_detections(self, msg: DetectionArray):
         self.latest_detections = msg
